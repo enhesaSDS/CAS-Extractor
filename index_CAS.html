@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAS Ingredient Extractor — TotalSDS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --teal: #0F6E56; --teal-light: #E1F5EE; --teal-mid: #1D9E75;
+      --navy: #0f1f3d; --navy-mid: #1a2f52;
+      --text-primary: #0f1f3d; --text-secondary: #5a6a84; --text-muted: #8fa0b8;
+      --border: #e2e8f2; --border-mid: #ccd5e3;
+      --bg: #f6f8fb; --surface: #ffffff;
+      --purple-bg: #EEEDFE; --purple-text: #3C3489;
+      --green-bg: #EAF3DE; --green-text: #3B6D11;
+      --danger-bg: #FCEBEB; --danger-text: #A32D2D; --danger-border: #F0959580;
+      --amber-bg: #FAEEDA; --amber-text: #854F0B; --amber-border: #FAC77580;
+      --radius: 10px; --radius-sm: 6px; --radius-lg: 14px;
+      --shadow: 0 1px 3px rgba(15,31,61,0.06), 0 4px 16px rgba(15,31,61,0.04);
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-primary); min-height: 100vh; font-size: 15px; line-height: 1.6; }
+
+    header { background: var(--navy); padding: 0 2rem; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-mark { width: 28px; height: 28px; background: var(--teal-mid); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .logo-mark svg { width: 16px; height: 16px; fill: white; }
+    .logo-text { font-size: 14px; font-weight: 600; color: white; letter-spacing: -0.01em; }
+    .logo-text span { color: #5DCAA5; }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .nav-tag { font-size: 11px; font-weight: 500; color: #5DCAA5; background: rgba(93,202,165,0.12); border: 1px solid rgba(93,202,165,0.25); padding: 3px 10px; border-radius: 99px; letter-spacing: 0.03em; }
+
+    /* API key status badge in nav */
+    .api-status { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 99px; cursor: pointer; border: 1px solid transparent; transition: background 0.15s; }
+    .api-status.not-set { color: #EF9F27; background: rgba(239,159,39,0.12); border-color: rgba(239,159,39,0.25); }
+    .api-status.is-set { color: #5DCAA5; background: rgba(93,202,165,0.12); border-color: rgba(93,202,165,0.25); }
+    .api-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .api-status.not-set .api-status-dot { background: #EF9F27; }
+    .api-status.is-set .api-status-dot { background: #5DCAA5; }
+
+    .hero { background: var(--navy); padding: 4rem 2rem 3.5rem; text-align: center; position: relative; overflow: hidden; }
+    .hero::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 40px; background: var(--bg); clip-path: ellipse(60% 100% at 50% 100%); }
+    .hero-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #5DCAA5; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 1rem; }
+    .hero-eyebrow-dot { width: 6px; height: 6px; background: #5DCAA5; border-radius: 50%; }
+    .hero h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 600; color: white; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 0.75rem; }
+    .hero h1 em { font-style: normal; color: #5DCAA5; }
+    .hero-sub { font-size: 16px; color: #8fa8cc; max-width: 520px; margin: 0 auto; line-height: 1.6; }
+
+    main { max-width: 820px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+
+    /* ── Modal overlay ── */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(15,31,61,0.55); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal { background: var(--surface); border-radius: var(--radius-lg); box-shadow: 0 8px 40px rgba(15,31,61,0.18); padding: 2rem; max-width: 480px; width: 100%; }
+    .modal-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+    .modal-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.5; }
+    .modal-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 6px; }
+    .modal-input { width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-mid); border-radius: var(--radius-sm); background: var(--bg); color: var(--text-primary); outline: none; margin-bottom: 10px; }
+    .modal-input:focus { border-color: var(--teal-mid); background: white; }
+    .modal-privacy { display: flex; align-items: flex-start; gap: 8px; background: var(--teal-light); border: 1px solid #9FE1CB; border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; color: var(--teal); line-height: 1.5; margin-bottom: 1.25rem; }
+    .modal-privacy svg { flex-shrink: 0; margin-top: 1px; }
+    .modal-actions { display: flex; gap: 8px; }
+    .modal-skip { flex: 0; padding: 9px 14px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-mid); border-radius: var(--radius-sm); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+    .modal-skip:hover { background: var(--bg); }
+    .modal-save { flex: 1; padding: 9px 14px; background: var(--teal); color: white; border: none; border-radius: var(--radius-sm); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .modal-save:hover { background: #0a5a44; }
+    .modal-clear { padding: 9px 14px; background: transparent; color: var(--danger-text); border: 1px solid var(--danger-border); border-radius: var(--radius-sm); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .modal-clear:hover { background: var(--danger-bg); }
+
+    /* ── Notices ── */
+    .notice { display: flex; align-items: flex-start; gap: 10px; border-radius: var(--radius); padding: 12px 16px; font-size: 13px; margin-bottom: 1rem; line-height: 1.5; }
+    .notice svg { flex-shrink: 0; margin-top: 1px; }
+    .notice-info { background: var(--teal-light); border: 1px solid #9FE1CB; color: var(--teal); }
+    .notice-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text); }
+    .notice-privacy { background: #E6F1FB; border: 1px solid #B5D4F4; color: #185FA5; }
+
+    /* ── Card ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+
+    .drop-zone { border: 2px dashed var(--border-mid); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: background 0.15s, border-color 0.15s; background: var(--bg); margin: 1.5rem; }
+    .drop-zone:hover, .drop-zone.drag-over { background: var(--teal-light); border-color: var(--teal-mid); }
+    .drop-icon { width: 48px; height: 48px; background: var(--teal-light); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
+    .drop-icon svg { width: 24px; height: 24px; stroke: var(--teal); }
+    .drop-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+    .drop-sub { font-size: 13px; color: var(--text-secondary); }
+    .drop-sub strong { color: var(--text-primary); }
+
+    .file-list { padding: 0 1.5rem; display: flex; flex-direction: column; gap: 6px; }
+    .file-item { display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px; }
+    .file-type-badge { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
+    .badge-pdf { background: var(--danger-bg); color: var(--danger-text); }
+    .badge-excel { background: var(--green-bg); color: var(--green-text); }
+    .badge-csv { background: var(--purple-bg); color: var(--purple-text); }
+    .file-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-size { color: var(--text-muted); font-size: 12px; }
+    .file-remove { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 18px; line-height: 1; padding: 0 2px; transition: color 0.1s; }
+    .file-remove:hover { color: var(--danger-text); }
+
+    /* enrichment toggle */
+    .enrichment-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 1.5rem; border-top: 1px solid var(--border); gap: 12px; }
+    .enrichment-label { font-size: 13px; color: var(--text-secondary); }
+    .enrichment-label strong { color: var(--text-primary); font-weight: 600; }
+    .enrichment-label small { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .toggle { position: relative; width: 36px; height: 20px; cursor: pointer; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track { position: absolute; inset: 0; background: var(--border-mid); border-radius: 99px; transition: background 0.2s; }
+    .toggle input:checked + .toggle-track { background: var(--teal-mid); }
+    .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: white; border-radius: 50%; transition: left 0.2s; }
+    .toggle input:checked ~ .toggle-thumb { left: 19px; }
+    .toggle-label { font-size: 12px; color: var(--text-muted); }
+
+    .card-footer { padding: 1.25rem 1.5rem; display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--border); }
+    .btn-primary { flex: 1; padding: 11px 20px; background: var(--teal); color: white; border: none; border-radius: var(--radius-sm); font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.15s, opacity 0.15s; }
+    .btn-primary:hover:not(:disabled) { background: #0a5a44; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-secondary { padding: 11px 16px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-mid); border-radius: var(--radius-sm); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.1s; }
+    .btn-secondary:hover { background: var(--bg); }
+
+    .progress-section { padding: 1rem 1.5rem 1.25rem; border-top: 1px solid var(--border); }
+    .progress-track { background: var(--border); border-radius: 99px; height: 4px; overflow: hidden; margin-bottom: 8px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--teal-mid), var(--teal)); border-radius: 99px; transition: width 0.35s ease; }
+    .progress-label { font-size: 12px; color: var(--text-secondary); }
+
+    .error-box { margin: 0 1.5rem 1.5rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: var(--danger-text); }
+
+    .results { margin-top: 2rem; }
+    .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .results-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+    .results-sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1.25rem; }
+    .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; box-shadow: var(--shadow); }
+    .metric-card.accent { border-top: 3px solid var(--teal-mid); }
+    .metric-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+    .metric-value { font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; line-height: 1; }
+    .metric-value.teal { color: var(--teal); }
+
+    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
+    .table-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+    .table-toolbar-left { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .table-toolbar-right { display: flex; gap: 8px; align-items: center; }
+    .search-wrap { position: relative; display: flex; align-items: center; }
+    .search-wrap svg { position: absolute; left: 10px; width: 14px; height: 14px; stroke: var(--text-muted); pointer-events: none; }
+    .search-input { font-family: 'Inter', sans-serif; font-size: 13px; padding: 6px 10px 6px 30px; border: 1px solid var(--border-mid); border-radius: var(--radius-sm); background: var(--bg); color: var(--text-primary); width: 200px; outline: none; }
+    .search-input:focus { border-color: var(--teal-mid); background: white; }
+    .icon-btn { display: flex; align-items: center; gap: 6px; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; padding: 6px 12px; border: 1px solid var(--border-mid); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-secondary); cursor: pointer; transition: background 0.1s, color 0.1s; white-space: nowrap; }
+    .icon-btn:hover { background: var(--bg); color: var(--text-primary); }
+    .icon-btn svg { width: 14px; height: 14px; stroke: currentColor; }
+    .icon-btn.success { color: var(--teal); border-color: #9FE1CB; background: var(--teal-light); }
+
+    .table-scroll { max-height: 420px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    thead { position: sticky; top: 0; z-index: 2; }
+    th { padding: 9px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); }
+    th:nth-child(1) { width: 26%; } th:nth-child(2) { width: 46%; } th:nth-child(3) { width: 28%; }
+    td { padding: 9px 16px; font-size: 13px; color: var(--text-primary); border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f9fafb; }
+    .cas-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--navy-mid); }
+    .source-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 99px; }
+    .pill-sds { background: var(--danger-bg); color: var(--danger-text); }
+    .pill-excel { background: var(--green-bg); color: var(--green-text); }
+    .pill-csv { background: var(--purple-bg); color: var(--purple-text); }
+    .pill-multi { background: #E6F1FB; color: #185FA5; }
+
+    .table-footer { padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 13px; }
+    .empty-state svg { width: 32px; height: 32px; stroke: var(--border-mid); display: block; margin: 0 auto 10px; }
+
+    .how-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 2rem; }
+    .how-step { background: var(--surface); padding: 1.25rem 1rem; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+    .step-num { font-size: 11px; font-weight: 600; color: var(--teal-mid); letter-spacing: 0.06em; }
+    .step-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .step-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+    footer { text-align: center; padding: 2rem; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 2rem; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 600px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .how-strip { grid-template-columns: 1fr; }
+      .search-input { width: 130px; }
+      .hero { padding: 2.5rem 1.25rem 2.5rem; }
+      .enrichment-row { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── API Key Modal ── -->
+<div class="modal-backdrop hidden" id="apiModal">
+  <div class="modal">
+    <div class="modal-title">Optional: add your Anthropic API key</div>
+    <div class="modal-sub">The API key enables automatic ingredient name lookup alongside CAS numbers. Without it, the tool still extracts and counts all CAS numbers — names will just show as "—".</div>
+    <label class="modal-label" for="apiKeyInput">Anthropic API key</label>
+    <input class="modal-input" type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" />
+    <div class="modal-privacy">
+      <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2L4 5v5c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V5l-6-3z"/></svg>
+      <span>Your key is stored only in your browser's memory for this session — it is never saved to disk, never sent to TotalSDS servers, and is cleared the moment you close this tab. It is sent directly to Anthropic's API over HTTPS only when you click "Extract."</span>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-skip" id="modalSkip">Skip — extract CAS only</button>
+      <button class="modal-save" id="modalSave">Save key &amp; continue</button>
+    </div>
+    <div style="margin-top:10px; text-align:right;">
+      <button class="modal-clear hidden" id="modalClear">Remove saved key</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16"><path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z"/></svg>
+    </div>
+    <span class="logo-text">Total<span>SDS</span></span>
+  </a>
+  <div class="nav-right">
+    <button class="api-status not-set" id="apiStatusBtn" onclick="openApiModal()">
+      <span class="api-status-dot"></span>
+      <span id="apiStatusLabel">API key not set</span>
+    </button>
+    <span class="nav-tag">Sales Tool</span>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-eyebrow"><div class="hero-eyebrow-dot"></div>CAS Ingredient Extractor</div>
+  <h1>How many ingredients does your <em>prospect</em> actually have?</h1>
+  <p class="hero-sub">Upload their SDSs or Excel BOMs — get a deduplicated CAS count in seconds. No spreadsheet formulas, no manual counting.</p>
+</div>
+
+<main>
+
+  <div class="notice notice-privacy">
+    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2L4 5v5c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V5l-6-3z"/></svg>
+    <span><strong>Files never leave your device.</strong> All PDF and Excel processing happens entirely in your browser. Nothing is uploaded to any server. If you add an optional API key, only CAS numbers and small text excerpts are sent to Anthropic for name lookup — over encrypted HTTPS.</span>
+  </div>
+
+  <div class="notice notice-info">
+    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 7h.01"/></svg>
+    <span>For PDFs, all pages are scanned including sections 3, 8, 11, 12, and 15 where SDS ingredient data typically lives. For Excel and CSV BOMs, every column is scanned. Duplicates across all files are automatically removed.</span>
+  </div>
+
+  <!-- Upload card -->
+  <div class="card" id="uploadCard">
+    <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Upload files">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/>
+        </svg>
+      </div>
+      <div class="drop-title">Drop files here, or click to browse</div>
+      <div class="drop-sub">Accepts <strong>PDF</strong> (SDS) &middot; <strong>Excel</strong> (.xlsx, .xls) &middot; <strong>CSV</strong> (BOM)</div>
+    </div>
+    <input type="file" id="fileInput" multiple accept=".pdf,.xlsx,.xls,.csv" style="display:none" />
+
+    <div class="file-list" id="fileList"></div>
+
+    <!-- Enrichment toggle -->
+    <div class="enrichment-row" id="enrichmentRow">
+      <div class="enrichment-label">
+        <strong>Look up ingredient names</strong>
+        <small id="enrichmentNote">Add an API key via the button in the top-right to enable</small>
+      </div>
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" id="enrichToggle" disabled />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+        <span class="toggle-label" id="toggleLabel">Off</span>
+      </div>
+    </div>
+
+    <div id="progressSection" class="progress-section hidden">
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="progress-label" id="progressLabel">Preparing...</div>
+    </div>
+
+    <div id="errorBox" class="error-box hidden"></div>
+
+    <div class="card-footer">
+      <button class="btn-primary" id="extractBtn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Extract CAS numbers
+      </button>
+      <button class="btn-secondary" id="clearBtn" style="display:none">Clear all</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="results hidden" id="resultsSection">
+    <div class="results-header">
+      <div>
+        <div class="results-title" id="resultsTitle">Results</div>
+        <div class="results-sub" id="resultsSub"></div>
+      </div>
+      <button class="icon-btn" onclick="exportCSV()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download CSV
+      </button>
+    </div>
+
+    <div class="summary-grid">
+      <div class="metric-card accent">
+        <div class="metric-label">Unique CAS numbers</div>
+        <div class="metric-value teal" id="metricCAS">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Files processed</div>
+        <div class="metric-value" id="metricFiles">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Duplicates removed</div>
+        <div class="metric-value" id="metricDupes">—</div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left" id="tableCount">—</div>
+        <div class="table-toolbar-right">
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input class="search-input" type="text" id="searchInput" placeholder="Search CAS or name…" oninput="filterTable()" />
+          </div>
+          <button class="icon-btn" id="copyBtn" onclick="copyCSV()">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy CSV
+          </button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>CAS number</th><th>Ingredient name</th><th>Source</th></tr></thead>
+          <tbody id="casTableBody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="tableFooterCount">—</span>
+        <span>Deduplicated across all uploaded files</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="how-strip">
+    <div class="how-step">
+      <div class="step-num">01</div>
+      <div class="step-title">Upload files</div>
+      <div class="step-desc">Drop SDS PDFs or Excel BOMs from the prospect — mix and match, any count.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">02</div>
+      <div class="step-title">Automatic extraction</div>
+      <div class="step-desc">CAS numbers are pulled from all pages and sections. Duplicates across files are removed.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">03</div>
+      <div class="step-title">Share the count</div>
+      <div class="step-desc">Download a clean CSV or copy results directly into your sales conversation.</div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  &copy; 2026 TotalSDS &nbsp;&middot;&nbsp; Internal sales tool &nbsp;&middot;&nbsp; Do not share externally
+</footer>
+
+<script>
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  // ── API key state (session memory only — never persisted) ──
+  let _apiKey = '';
+
+  function getApiKey() { return _apiKey; }
+  function setApiKey(k) {
+    _apiKey = k || '';
+    updateApiStatus();
+  }
+
+  function updateApiStatus() {
+    const btn = document.getElementById('apiStatusBtn');
+    const label = document.getElementById('apiStatusLabel');
+    const toggle = document.getElementById('enrichToggle');
+    const note = document.getElementById('enrichmentNote');
+    const toggleLabel = document.getElementById('toggleLabel');
+    const clearBtn = document.getElementById('modalClear');
+
+    if (_apiKey) {
+      btn.className = 'api-status is-set';
+      label.textContent = 'API key active';
+      toggle.disabled = false;
+      note.textContent = 'Names will be looked up via the Anthropic API';
+      clearBtn.classList.remove('hidden');
+    } else {
+      btn.className = 'api-status not-set';
+      label.textContent = 'API key not set';
+      toggle.disabled = true;
+      toggle.checked = false;
+      toggleLabel.textContent = 'Off';
+      note.textContent = 'Add an API key via the button in the top-right to enable';
+      clearBtn.classList.add('hidden');
+    }
+  }
+
+  document.getElementById('enrichToggle').addEventListener('change', function() {
+    document.getElementById('toggleLabel').textContent = this.checked ? 'On' : 'Off';
+  });
+
+  // ── Modal ──
+  function openApiModal() {
+    document.getElementById('apiKeyInput').value = _apiKey ? '••••••••••••••••' : '';
+    document.getElementById('apiModal').classList.remove('hidden');
+  }
+  function closeApiModal() { document.getElementById('apiModal').classList.add('hidden'); }
+
+  document.getElementById('apiModal').addEventListener('click', function(e) {
+    if (e.target === this) closeApiModal();
+  });
+  document.getElementById('modalSkip').addEventListener('click', closeApiModal);
+  document.getElementById('modalSave').addEventListener('click', function() {
+    const val = document.getElementById('apiKeyInput').value.trim();
+    if (val && !val.startsWith('•')) setApiKey(val);
+    closeApiModal();
+  });
+  document.getElementById('modalClear').addEventListener('click', function() {
+    setApiKey('');
+    document.getElementById('apiKeyInput').value = '';
+    closeApiModal();
+  });
+
+  // ── File handling ──
+  const CAS_REGEX = /\b(\d{2,7}-\d{2}-\d)\b/g;
+  let uploadedFiles = [], allResults = [], filteredResults = [];
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles([...e.dataTransfer.files]); });
+  fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    uploadedFiles = [];
+    renderFileList();
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('errorBox').classList.add('hidden');
+    document.getElementById('clearBtn').style.display = 'none';
+    document.getElementById('extractBtn').disabled = true;
+  });
+
+  function addFiles(files) {
+    files.forEach(f => {
+      const ext = f.name.split('.').pop().toLowerCase();
+      if (!['pdf','xlsx','xls','csv'].includes(ext)) return;
+      if (uploadedFiles.find(u => u.name === f.name && u.size === f.size)) return;
+      uploadedFiles.push(f);
+    });
+    renderFileList();
+    document.getElementById('extractBtn').disabled = uploadedFiles.length === 0;
+    document.getElementById('clearBtn').style.display = uploadedFiles.length ? 'block' : 'none';
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('errorBox').classList.add('hidden');
+  }
+
+  function removeFile(idx) {
+    uploadedFiles.splice(idx, 1);
+    renderFileList();
+    document.getElementById('extractBtn').disabled = uploadedFiles.length === 0;
+    document.getElementById('clearBtn').style.display = uploadedFiles.length ? 'block' : 'none';
+  }
+
+  function renderFileList() {
+    const list = document.getElementById('fileList');
+    list.innerHTML = '';
+    if (!uploadedFiles.length) return;
+    uploadedFiles.forEach((f, i) => {
+      const ext = f.name.split('.').pop().toLowerCase();
+      const badgeClass = ext === 'pdf' ? 'badge-pdf' : ext === 'csv' ? 'badge-csv' : 'badge-excel';
+      const sizeStr = f.size < 1024*1024 ? Math.round(f.size/1024) + ' KB' : (f.size/1024/1024).toFixed(1) + ' MB';
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      div.innerHTML = '<span class="file-type-badge ' + badgeClass + '">' + ext.toUpperCase() + '</span><span class="file-name">' + f.name + '</span><span class="file-size">' + sizeStr + '</span><button class="file-remove" onclick="removeFile(' + i + ')" aria-label="Remove">&times;</button>';
+      list.appendChild(div);
+    });
+    const spacer = document.createElement('div');
+    spacer.style.height = '0.5rem';
+    list.appendChild(spacer);
+  }
+
+  const readAsText = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsText(f); });
+  const readAsBuffer = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsArrayBuffer(f); });
+
+  function extractCAS(text, filename) {
+    return [...text.matchAll(CAS_REGEX)].map(m => ({ cas: m[1], source: filename }));
+  }
+
+  async function processFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    let text = '';
+    if (ext === 'csv') {
+      text = await readAsText(file);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const buf = await readAsBuffer(file);
+      const wb = XLSX.read(buf, { type: 'array' });
+      wb.SheetNames.forEach(name => { text += XLSX.utils.sheet_to_csv(wb.Sheets[name]) + '\n'; });
+    } else if (ext === 'pdf') {
+      const buf = await readAsBuffer(file);
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        text += content.items.map(i => i.str).join(' ') + '\n';
+      }
+    }
+    return { text, entries: extractCAS(text, file.name) };
+  }
+
+  // Enrichment: only called if user has set an API key AND toggled it on
+  async function enrichWithNames(uniqueCAS, fileTexts, apiKey) {
+    const sample = fileTexts.slice(0, 4).map(ft => 'File: ' + ft.name + '\n' + ft.text.slice(0, 6000)).join('\n\n---\n\n');
+    const prompt = 'You are a chemical regulatory specialist. These CAS numbers were extracted from SDS/BOM documents: ' + uniqueCAS.join(', ') + '\n\nSource document excerpts:\n' + sample + '\n\nFor each CAS number, identify the chemical or ingredient name from the text above. If not found, return "Unknown".\n\nRespond ONLY with a JSON array — no markdown, no backticks, no explanation:\n[{"cas":"64-17-5","name":"Ethanol"},...]\n\nOnly include these CAS numbers: ' + uniqueCAS.join(', ');
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'API call failed (' + res.status + ')');
+    }
+    const data = await res.json();
+    const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+    try { return JSON.parse(raw); }
+    catch { const m = raw.match(/\[[\s\S]*\]/); return m ? JSON.parse(m[0]) : []; }
+  }
+
+  function setProgress(pct, label) {
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = label;
+  }
+
+  document.getElementById('extractBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('extractBtn');
+    btn.disabled = true;
+    document.getElementById('progressSection').classList.remove('hidden');
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('errorBox').classList.add('hidden');
+
+    const doEnrich = document.getElementById('enrichToggle').checked && !!getApiKey();
+
+    try {
+      let rawEntries = [], fileTexts = [];
+
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const f = uploadedFiles[i];
+        setProgress(Math.round(5 + (i / uploadedFiles.length) * 45), 'Reading ' + f.name + '…');
+        try {
+          const { text, entries } = await processFile(f);
+          rawEntries.push(...entries);
+          if (text) fileTexts.push({ name: f.name, text });
+        } catch (e) { console.error('Failed:', f.name, e); }
+      }
+
+      setProgress(55, 'Deduplicating…');
+      const totalRaw = rawEntries.length;
+      const casSourceMap = {};
+      rawEntries.forEach(e => {
+        if (!casSourceMap[e.cas]) casSourceMap[e.cas] = new Set();
+        casSourceMap[e.cas].add(e.source);
+      });
+      const uniqueCAS = Object.keys(casSourceMap).sort();
+
+      let nameMap = {};
+      if (doEnrich && uniqueCAS.length) {
+        setProgress(65, 'Looking up ingredient names via API…');
+        try {
+          const enriched = await enrichWithNames(uniqueCAS, fileTexts, getApiKey());
+          enriched.forEach(item => { if (item.cas) nameMap[item.cas] = item.name || ''; });
+        } catch (e) {
+          console.warn('Enrichment failed:', e.message);
+          document.getElementById('errorBox').textContent = 'Name lookup failed: ' + e.message + '. CAS numbers are still shown below.';
+          document.getElementById('errorBox').classList.remove('hidden');
+        }
+      }
+
+      setProgress(92, 'Building results…');
+      allResults = uniqueCAS.map(cas => {
+        const sources = [...casSourceMap[cas]];
+        const types = sources.map(s => s.split('.').pop().toLowerCase());
+        const sourceType = sources.length > 1 ? 'multi' : types[0] === 'pdf' ? 'sds' : types[0] === 'csv' ? 'csv' : 'excel';
+        return { cas, name: nameMap[cas] || '', sources, sourceType };
+      });
+      filteredResults = [...allResults];
+
+      const dupes = totalRaw - uniqueCAS.length;
+      document.getElementById('metricCAS').textContent = uniqueCAS.length.toLocaleString();
+      document.getElementById('metricFiles').textContent = uploadedFiles.length;
+      document.getElementById('metricDupes').textContent = dupes.toLocaleString();
+      document.getElementById('resultsTitle').textContent = uniqueCAS.length === 0 ? 'No CAS numbers found' : 'Extraction complete';
+      document.getElementById('resultsSub').textContent = uniqueCAS.length
+        ? uniqueCAS.length + ' unique ingredient' + (uniqueCAS.length !== 1 ? 's' : '') + ' across ' + uploadedFiles.length + ' file' + (uploadedFiles.length !== 1 ? 's' : '')
+        : 'Try uploading different files or check that they contain CAS numbers in standard format (e.g. 64-17-5)';
+
+      renderTable(filteredResults);
+      setProgress(100, 'Done!');
+      setTimeout(() => {
+        document.getElementById('progressSection').classList.add('hidden');
+        document.getElementById('resultsSection').classList.remove('hidden');
+        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 400);
+
+    } catch (err) {
+      document.getElementById('progressSection').classList.add('hidden');
+      document.getElementById('errorBox').textContent = 'Error: ' + (err.message || 'Something went wrong.');
+      document.getElementById('errorBox').classList.remove('hidden');
+      console.error(err);
+    }
+
+    btn.disabled = uploadedFiles.length === 0;
+  });
+
+  function renderTable(data) {
+    const tbody = document.getElementById('casTableBody');
+    const count = data.length;
+    document.getElementById('tableCount').textContent = count === allResults.length
+      ? count + ' ingredient' + (count !== 1 ? 's' : '')
+      : count + ' of ' + allResults.length + ' shown';
+    document.getElementById('tableFooterCount').textContent = count + ' result' + (count !== 1 ? 's' : '');
+
+    if (!count) {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>No results match your search</div></td></tr>';
+      return;
+    }
+
+    const pillMap = { sds: ['pill-sds','SDS (PDF)'], excel: ['pill-excel','Excel BOM'], csv: ['pill-csv','CSV BOM'], multi: ['pill-multi','Multiple files'] };
+    tbody.innerHTML = data.map(row => {
+      const [pillClass, pillLabel] = pillMap[row.sourceType] || ['pill-multi','Unknown'];
+      const nameCell = row.name && row.name !== 'Unknown'
+        ? '<span title="' + row.name + '">' + row.name + '</span>'
+        : '<span style="color:var(--text-muted)">—</span>';
+      return '<tr><td><span class="cas-num">' + row.cas + '</span></td><td style="overflow:hidden;text-overflow:ellipsis;">' + nameCell + '</td><td><span class="source-pill ' + pillClass + '">' + pillLabel + '</span></td></tr>';
+    }).join('');
+  }
+
+  function filterTable() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    filteredResults = q ? allResults.filter(r => r.cas.includes(q) || (r.name||'').toLowerCase().includes(q)) : [...allResults];
+    renderTable(filteredResults);
+  }
+
+  function buildCSV() {
+    const header = 'CAS Number,Ingredient Name,Source File(s)\n';
+    const rows = filteredResults.map(r => r.cas + ',"' + (r.name||'Unknown').replace(/"/g,'""') + '","' + r.sources.join('; ') + '"').join('\n');
+    return header + rows;
+  }
+
+  function copyCSV() {
+    navigator.clipboard.writeText(buildCSV()).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.classList.add('success');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+      setTimeout(() => { btn.classList.remove('success'); btn.innerHTML = orig; }, 2500);
+    });
+  }
+
+  function exportCSV() {
+    const blob = new Blob([buildCSV()], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cas-extract-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }
+
+  // init
+  updateApiStatus();
+</script>
+</body>
+</html>
